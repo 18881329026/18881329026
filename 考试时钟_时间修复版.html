@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考试专用时钟 - Exam Clock</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&family=Roboto+Mono:wght@400;500;700&family=Inter:wght@400;600&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-color: #0a0a0a;
+            --text-color: #ffffff;
+            --accent-color: #dc2626;
+            --secondary-color: #333333;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --font-mono: 'Roboto Mono', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            transition: background 0.5s ease, color 0.5s ease;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body.day-mode {
+            --bg-color: #f5f5f7;
+            --text-color: #1d1d1f;
+            --accent-color: #dc2626;
+            --secondary-color: #e5e5e7;
+            --glass-bg: rgba(0, 0, 0, 0.02);
+            --border-color: rgba(0, 0, 0, 0.06);
+        }
+
+        .bg-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.015;
+            pointer-events: none;
+            background-image: 
+                linear-gradient(90deg, var(--text-color) 1px, transparent 1px),
+                linear-gradient(var(--text-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            contain: strict;
+        }
+
+        .exam-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: var(--accent-color);
+            color: white;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 4px 30px rgba(220, 38, 38, 0.3);
+            height: 60px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slogan-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slogan-item {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-serif);
+            font-size: clamp(1rem, 3vw, 1.8rem);
+            font-weight: 900;
+            letter-spacing: 0.2em;
+            white-space: nowrap;
+            opacity: 0;
+            transform: translateY(100%);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+            padding: 0 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .slogan-item.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .slogan-item.leaving {
+            opacity: 0;
+            transform: translateY(-100%);
+        }
+
+        .main-content {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            contain: layout style;
+        }
+
+        .clock-wrapper {
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            padding: 40px;
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            will-change: transform;
+            transform: translateZ(0);
+            contain: layout style paint;
+        }
+
+        .time-container {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            font-size: 10rem;
+            line-height: 1;
+            letter-spacing: 0.02em;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+            color: var(--text-color);
+            text-shadow: none;
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            width: fit-content;
+            max-width: 100%;
+            will-change: contents;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+        }
+
+        body.day-mode .time-container {
+            text-shadow: none;
+        }
+
+        .time-part {
+            display: inline-block;
+            text-align: center;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+            min-width: 2ch;
+        }
+
+        .separator {
+            display: inline-block;
+            margin: 0 0.05em;
+            opacity: 0.4;
+            font-weight: 400;
+            animation: blink 2s infinite;
+            will-change: opacity;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.15; }
+        }
+
+        .ampm-indicator {
+            font-size: 0.2em;
+            margin-left: 0.2em;
+            color: var(--accent-color);
+            font-weight: 600;
+            align-self: flex-start;
+        }
+
+        .info-bar {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+            color: var(--text-color);
+            opacity: 0.5;
+            letter-spacing: 0.05em;
+            font-family: var(--font-sans);
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .timezone-display {
+            font-weight: 600;
+            color: var(--accent-color);
+            opacity: 1;
+            font-size: 1.1rem;
+        }
+
+        .sync-info-row {
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            font-size: 0.8rem;
+            color: var(--text-color);
+            opacity: 0.35;
+            font-family: var(--font-sans);
+            letter-spacing: 0.05em;
+            flex-wrap: wrap;
+        }
+
+        .sync-status-inline {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sync-dot-inline {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            will-change: transform, background-color;
+        }
+
+        .sync-indicator.syncing .sync-dot-inline {
+            background: #eab308;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .sync-indicator {
+            display: none;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px;
+            background: var(--glass-bg);
+            border-top: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            z-index: 100;
+            height: 80px;
+            align-items: center;
+            will-change: transform, opacity;
+            transform: translateZ(0);
+            contain: layout style;
+        }
+
+        .controls.hidden {
+            transform: translateY(100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: 1.5px solid var(--border-color);
+            color: var(--text-color);
+            padding: 10px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            will-change: transform, background-color, color;
+            transform: translateZ(0);
+        }
+
+        .control-btn:hover {
+            background: var(--text-color);
+            color: var(--bg-color);
+            border-color: var(--text-color);
+            transform: translateY(-1px);
+        }
+
+        .control-btn.active {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+        }
+
+        .timezone-select {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 30px;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease;
+            max-height: 70vh;
+            overflow-y: auto;
+            min-width: 340px;
+            box-shadow: 0 25px 100px rgba(0,0,0,0.5);
+            will-change: transform, opacity;
+            contain: layout style paint;
+        }
+
+        body.day-mode .timezone-select {
+            background: #ffffff;
+            box-shadow: 0 25px 100px rgba(0,0,0,0.15);
+        }
+
+        .timezone-select.active {
+            opacity: 1;
+            pointer-events: all;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .timezone-option {
+            padding: 14px 18px;
+            margin: 6px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+            color: var(--text-color);
+            font-family: var(--font-sans);
+            will-change: transform, background-color, border-color;
+        }
+
+        .timezone-option:hover {
+            background: var(--secondary-color);
+            border-color: var(--accent-color);
+        }
+
+        .timezone-option.selected {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: var(--secondary-color);
+            color: var(--text-color);
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-family: var(--font-sans);
+            will-change: transform, background-color;
+        }
+
+        .close-btn:hover {
+            background: var(--accent-color);
+            color: white;
+            transform: rotate(90deg);
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            backdrop-filter: blur(4px);
+            will-change: opacity;
+            contain: strict;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .fullscreen-hint {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--glass-bg);
+            border: 1px solid var(--accent-color);
+            padding: 16px 32px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 3000;
+            color: var(--text-color);
+            backdrop-filter: blur(20px);
+            font-family: var(--font-sans);
+            font-weight: 600;
+            text-shadow: none;
+            will-change: opacity;
+        }
+
+        .fullscreen-hint.show {
+            opacity: 1;
+        }
+
+        @media (max-height: 800px) {
+            .time-container {
+                font-size: 8rem;
+            }
+            .clock-wrapper {
+                padding: 30px;
+            }
+        }
+
+        @media (max-height: 600px) {
+            .time-container {
+                font-size: 6rem;
+            }
+            .info-bar {
+                margin-top: 20px;
+                padding-top: 15px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .time-container {
+                font-size: 8rem;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .time-container {
+                font-size: 6rem;
+            }
+            .clock-wrapper {
+                padding: 30px 20px;
+            }
+            .info-bar {
+                flex-direction: column;
+                gap: 8px;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .time-container {
+                font-size: 4rem;
+            }
+            .ampm-indicator {
+                font-size: 0.25em;
+            }
+            .controls {
+                gap: 8px;
+                padding: 15px 10px;
+            }
+            .control-btn {
+                padding: 8px 16px;
+                font-size: 0.8rem;
+                flex: 1;
+                justify-content: center;
+                min-width: 0;
+            }
+        }
+
+        @media (min-width: 1920px) {
+            .time-container {
+                font-size: 14rem;
+            }
+            .clock-wrapper {
+                max-width: 1600px;
+                padding: 60px;
+            }
+        }
+
+        @media (min-width: 2560px) {
+            .time-container {
+                font-size: 18rem;
+            }
+            .clock-wrapper {
+                max-width: 2000px;
+                padding: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+
+    <div class="exam-banner">
+        <div class="slogan-container" id="sloganContainer">
+            <div class="slogan-item" data-index="0">考 试 肃 静</div>
+            <div class="slogan-item" data-index="1">考 之 以 诚 ， 答 之 以 信</div>
+            <div class="slogan-item" data-index="2">Test with honesty, answer with integrity.</div>
+        </div>
+    </div>
+
+    <div class="sync-indicator" id="syncIndicator" style="display: none;">
+        <div class="sync-dot"></div>
+        <span id="syncText">系统时间正常</span>
+    </div>
+
+    <div class="main-content">
+        <div class="clock-wrapper">
+            <div class="time-container" id="timeDisplay">
+                <span class="time-part" id="hours">00</span><span class="separator">:</span><span class="time-part" id="minutes">00</span><span class="separator">:</span><span class="time-part" id="seconds">00</span><span class="ampm-indicator" id="ampm"></span>
+            </div>
+            <div class="info-bar">
+                <span id="dateDisplay">YYYY年MM月DD日</span>
+                <span class="timezone-display" id="timezoneDisplay">北京时间 (UTC+8)</span>
+            </div>
+            <div class="sync-info-row">
+                <div class="sync-status-inline" id="syncStatusInline">
+                    <div class="sync-dot-inline" id="syncDotInline"></div>
+                    <span id="syncTextInline">系统时间正常</span>
+                </div>
+                <div class="next-sync" id="nextSync">下次校准: 30:00</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls" id="controls">
+        <button class="control-btn active" id="formatBtn" onclick="toggleFormat()">
+            <span>24H</span>
+        </button>
+        <button class="control-btn" onclick="showTimezoneSelect()">
+            <span>🌍 时区</span>
+        </button>
+        <button class="control-btn" id="modeBtn" onclick="toggleMode()">
+            <span>☀ 白天</span>
+        </button>
+        <button class="control-btn" onclick="toggleFullscreen()">
+            <span>⛶ 全屏</span>
+        </button>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="hideTimezoneSelect()"></div>
+
+    <div class="timezone-select" id="timezoneSelect">
+        <button class="close-btn" onclick="hideTimezoneSelect()">×</button>
+        <h3 style="margin-bottom: 20px; text-align: center; letter-spacing: 0.2em; color: var(--accent-color); font-family: var(--font-serif); font-size: 1.3rem;">选择时区</h3>
+        <div id="timezoneList"></div>
+    </div>
+
+    <div class="fullscreen-hint" id="fullscreenHint">按 ESC 退出全屏</div>
+
+    <script>
+        // ==========================================
+        // 完全独立的两个系统：时间更新 和 标语切换
+        // ==========================================
+
+        // 时间系统变量
+        let is24Hour = true;
+        let currentTimezone = 'Asia/Shanghai';
+        let isDayMode = false;
+        let lastSyncTime = Date.now();
+        let nextSyncTime = Date.now() + 30 * 60 * 1000;
+        let timeAnimationId = null;
+        let lastSecond = -1;
+
+        // 标语系统变量 - 完全独立
+        const SLOGAN_DURATION = 10 * 1000; // 10秒
+        let currentSloganIndex = 0;
+        let lastSloganSwitchTime = Date.now();
+        let sloganItems = null;
+
+        const timezoneDB = {
+            'Asia/Shanghai': { name: '北京时间', offset: 8, dst: false },
+            'Asia/Tokyo': { name: '东京时间', offset: 9, dst: false },
+            'Asia/Seoul': { name: '首尔时间', offset: 9, dst: false },
+            'Asia/Singapore': { name: '新加坡时间', offset: 8, dst: false },
+            'Asia/Hong_Kong': { name: '香港时间', offset: 8, dst: false },
+            'Asia/Taipei': { name: '台北时间', offset: 8, dst: false },
+            'Europe/London': { name: '伦敦时间', offset: 0, dst: true },
+            'Europe/Paris': { name: '巴黎时间', offset: 1, dst: true },
+            'Europe/Berlin': { name: '柏林时间', offset: 1, dst: true },
+            'Europe/Moscow': { name: '莫斯科时间', offset: 3, dst: false },
+            'America/New_York': { name: '纽约时间', offset: -5, dst: true },
+            'America/Los_Angeles': { name: '洛杉矶时间', offset: -8, dst: true },
+            'America/Chicago': { name: '芝加哥时间', offset: -6, dst: true },
+            'America/Denver': { name: '丹佛时间', offset: -7, dst: true },
+            'America/Vancouver': { name: '温哥华时间', offset: -8, dst: true },
+            'Australia/Sydney': { name: '悉尼时间', offset: 10, dst: true },
+            'Australia/Melbourne': { name: '墨尔本时间', offset: 10, dst: true },
+            'Asia/Dubai': { name: '迪拜时间', offset: 4, dst: false },
+            'Asia/Kolkata': { name: '孟买时间', offset: 5.5, dst: false },
+            'UTC': { name: 'UTC时间', offset: 0, dst: false }
+        };
+
+        // ==========================================
+        // 标语切换系统 - 使用requestAnimationFrame检查时间
+        // ==========================================
+        function initSloganSystem() {
+            sloganItems = document.querySelectorAll('.slogan-item');
+            // 激活第一条
+            sloganItems[0].classList.add('active');
+            lastSloganSwitchTime = Date.now();
+
+            // 使用独立的requestAnimationFrame循环检查标语切换
+            function checkSloganSwitch() {
+                const now = Date.now();
+                if (now - lastSloganSwitchTime >= SLOGAN_DURATION) {
+                    switchSlogan();
+                    lastSloganSwitchTime = now;
+                }
+                requestAnimationFrame(checkSloganSwitch);
+            }
+            requestAnimationFrame(checkSloganSwitch);
+        }
+
+        function switchSlogan() {
+            const prevIndex = currentSloganIndex;
+            currentSloganIndex = (currentSloganIndex + 1) % sloganItems.length;
+
+            // 当前标语向上滑出
+            sloganItems[prevIndex].classList.remove('active');
+            sloganItems[prevIndex].classList.add('leaving');
+
+            // 新标语从下方滑入
+            setTimeout(() => {
+                sloganItems[prevIndex].classList.remove('leaving');
+                sloganItems[currentSloganIndex].classList.add('active');
+            }, 100);
+        }
+
+        // ==========================================
+        // 时间更新系统 - 完全独立的requestAnimationFrame
+        // ==========================================
+        function updateTimeLoop() {
+            const now = Date.now();
+            const targetTime = getTimezoneTime(new Date(now), currentTimezone);
+            const currentSecond = targetTime.getSeconds();
+
+            // 每秒更新一次显示
+            if (currentSecond !== lastSecond) {
+                lastSecond = currentSecond;
+
+                let hours = targetTime.getHours();
+                const minutes = targetTime.getMinutes().toString().padStart(2, '0');
+                const seconds = targetTime.getSeconds().toString().padStart(2, '0');
+                let ampm = '';
+
+                if (!is24Hour) {
+                    ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                }
+
+                // 更新DOM
+                document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
+                document.getElementById('minutes').textContent = minutes;
+                document.getElementById('seconds').textContent = seconds;
+                document.getElementById('ampm').textContent = ampm;
+
+                // 更新日期
+                const year = targetTime.getFullYear();
+                const month = (targetTime.getMonth() + 1).toString().padStart(2, '0');
+                const day = targetTime.getDate().toString().padStart(2, '0');
+                const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                const weekday = weekdays[targetTime.getDay()];
+                document.getElementById('dateDisplay').textContent = `${year}年${month}月${day}日 ${weekday}`;
+
+                // 更新同步倒计时
+                updateSyncCountdown();
+
+                // 检查是否需要同步
+                if (now >= nextSyncTime) {
+                    performSync();
+                }
+            }
+
+            timeAnimationId = requestAnimationFrame(updateTimeLoop);
+        }
+
+        function getTimezoneTime(date, timezone) {
+            const info = timezoneDB[timezone];
+            if (!info) return date;
+            const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+            let offset = info.offset;
+            if (info.dst && isDST(date, timezone)) offset += 1;
+            return new Date(utc + (offset * 3600000));
+        }
+
+        function isDST(date, timezone) {
+            const info = timezoneDB[timezone];
+            if (!info || !info.dst) return false;
+            const month = date.getMonth();
+            return month > 2 && month < 10;
+        }
+
+        function updateSyncCountdown() {
+            const now = Date.now();
+            const diff = nextSyncTime - now;
+            if (diff > 0) {
+                const minutes = Math.floor(diff / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                document.getElementById('nextSync').textContent = 
+                    `下次校准: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+                document.getElementById('nextSync').textContent = '即将校准...';
+            }
+        }
+
+        function performSync() {
+            const dot = document.getElementById('syncDotInline');
+            const text = document.getElementById('syncTextInline');
+            const statusRow = document.getElementById('syncStatusInline');
+
+            statusRow.classList.add('syncing');
+            text.textContent = '正在同步...';
+
+            setTimeout(() => {
+                lastSyncTime = Date.now();
+                nextSyncTime = lastSyncTime + 30 * 60 * 1000;
+                statusRow.classList.remove('syncing');
+                const now = new Date();
+                const timeStr = now.getHours().toString().padStart(2,'0') + ':' + 
+                               now.getMinutes().toString().padStart(2,'0');
+                text.textContent = '已同步 ' + timeStr;
+                setTimeout(() => { text.textContent = '系统时间正常'; }, 5000);
+            }, 1000);
+        }
+
+        // ==========================================
+        // 控制功能
+        // ==========================================
+        function initTimezoneSelect() {
+            const list = document.getElementById('timezoneList');
+            list.innerHTML = '';
+            Object.keys(timezoneDB).forEach(tz => {
+                const info = timezoneDB[tz];
+                const div = document.createElement('div');
+                div.className = 'timezone-option';
+                if (tz === currentTimezone) div.classList.add('selected');
+                const offsetStr = info.offset >= 0 ? `UTC+${info.offset}` : `UTC${info.offset}`;
+                div.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 4px; font-size: 1rem;">${info.name}</div>
+                    <div style="font-size: 0.85rem; opacity: 0.6; font-family: var(--font-mono);">${tz} · ${offsetStr}</div>
+                `;
+                div.onclick = function() { selectTimezone(tz); };
+                list.appendChild(div);
+            });
+        }
+
+        function selectTimezone(tz) {
+            currentTimezone = tz;
+            const info = timezoneDB[tz];
+            const offsetStr = info.offset >= 0 ? `UTC+${info.offset}` : `UTC${info.offset}`;
+            document.getElementById('timezoneDisplay').textContent = `${info.name} (${offsetStr})`;
+            document.querySelectorAll('.timezone-option').forEach(el => el.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            hideTimezoneSelect();
+            lastSecond = -1; // 强制刷新时间
+        }
+
+        function showTimezoneSelect() {
+            initTimezoneSelect();
+            document.getElementById('overlay').classList.add('active');
+            document.getElementById('timezoneSelect').classList.add('active');
+        }
+
+        function hideTimezoneSelect() {
+            document.getElementById('overlay').classList.remove('active');
+            document.getElementById('timezoneSelect').classList.remove('active');
+        }
+
+        function toggleFormat() {
+            is24Hour = !is24Hour;
+            const btn = document.getElementById('formatBtn');
+            btn.innerHTML = `<span>${is24Hour ? '24H' : '12H'}</span>`;
+            btn.classList.toggle('active', is24Hour);
+            lastSecond = -1;
+        }
+
+        function toggleMode() {
+            isDayMode = !isDayMode;
+            document.body.classList.toggle('day-mode', isDayMode);
+            const btn = document.getElementById('modeBtn');
+            btn.innerHTML = `<span>${isDayMode ? '☾ 黑夜' : '☀ 白天'}</span>`;
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log('全屏请求失败:', err);
+                }).then(() => {
+                    document.getElementById('fullscreenHint').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('fullscreenHint').classList.remove('show');
+                    }, 3000);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        let controlsTimeout;
+        function showControls() {
+            const controls = document.getElementById('controls');
+            controls.classList.remove('hidden');
+            clearTimeout(controlsTimeout);
+            controlsTimeout = setTimeout(() => {
+                if (!document.getElementById('timezoneSelect').classList.contains('active')) {
+                    controls.classList.add('hidden');
+                }
+            }, 5000);
+        }
+
+        // 事件监听
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+            if (e.key === 'm' || e.key === 'M') toggleMode();
+            if (e.key === 't' || e.key === 'T') toggleFormat();
+            if (e.key === 'z' || e.key === 'Z') showTimezoneSelect();
+            if (e.key === 'Escape') hideTimezoneSelect();
+            showControls();
+        });
+
+        document.addEventListener('mousemove', showControls);
+        document.addEventListener('click', showControls);
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                document.getElementById('fullscreenHint').classList.remove('show');
+            }
+        });
+
+        window.addEventListener('resize', () => { lastSecond = -1; });
+
+        // ==========================================
+        // 初始化 - 启动两个完全独立的系统
+        // ==========================================
+        initTimezoneSelect();
+        initSloganSystem();      // 启动标语系统
+        updateTimeLoop();        // 启动时间系统
+        showControls();
+        setTimeout(performSync, 1000);
+
+        console.log('考试时钟已启动');
+        console.log('时间系统: 独立运行');
+        console.log('标语系统: 每10秒切换，独立运行');
+    </script>
+</body>
+</html>
